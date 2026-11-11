@@ -3,14 +3,21 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy dependency manifests
+# Install curl for healthcheck support
+RUN apk add --no-cache curl
+
+# Copy dependency manifests first (layer cache optimisation)
 COPY package*.json ./
 
-# Install production dependencies
+# Install production dependencies only
 RUN npm ci --omit=dev
 
 # Copy application source
 COPY . .
+
+# Create a non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 
 # Expose backend port
 EXPOSE 5000

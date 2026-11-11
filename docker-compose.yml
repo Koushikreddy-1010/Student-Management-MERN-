@@ -1,56 +1,68 @@
-version: '3.8'
-
 services:
-  # Official MongoDB Database Service
+  # -------------------------------------------------------------
+  # MongoDB Database Service
+  # -------------------------------------------------------------
   mongodb:
     image: mongo:7.0
     container_name: campusos_mongo
-    restart: always
-    ports:
-      - "27017:27017"
+    restart: unless-stopped
     environment:
-      MONGO_INITDB_DATABASE: campusos
+      MONGO_INITDB_DATABASE: ${DB_NAME:-campusos}
     volumes:
       - mongo_data:/data/db
     networks:
       - campusos_net
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
+  # -------------------------------------------------------------
   # Express + Node.js Backend Service
+  # -------------------------------------------------------------
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: campusos_backend
-    restart: always
-    ports:
-      - "5000:5000"
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=production
-      - PORT=5000
-      - MONGODB_URI=mongodb://mongodb:27017/campusos
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-5000}
+      - MONGODB_URI=mongodb://mongodb:27017/${DB_NAME:-campusos}
     depends_on:
       mongodb:
         condition: service_healthy
     networks:
       - campusos_net
+    ports:
+      - "${PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-5001}/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
+  # -------------------------------------------------------------
   # React + Vite Frontend Service (Nginx)
+  # -------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: campusos_frontend
-    restart: always
+    restart: unless-stopped
     ports:
-      - "80:80"
-      - "3000:80"
+      - "8080:80"
+      - "4000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - campusos_net
 
